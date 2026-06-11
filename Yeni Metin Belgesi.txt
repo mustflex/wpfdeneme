@@ -1,0 +1,535 @@
+_________________________________________________________App.xaml___________________
+
+
+<Application x:Class="MustafaBayram.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:MustafaBayram"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             StartupUri="Views/LoginViews/LoginWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <materialDesign:BundledTheme BaseTheme="Dark" PrimaryColor="DeepPurple" SecondaryColor="Lime" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
+
+
+_________________________________________________________Commands / RelayCommand.cs___________________
+using System;
+using System.Windows.Input;
+
+namespace MustafaBayram.Commands
+{
+    public class RelayCommand : ICommand
+    {
+        private Action _execute1;
+        private Func<bool> _canExecute1;
+        private Action<object> _execute2;
+        private Func<object, bool> _canExecute2;
+
+        public RelayCommand(Action<object> execute) : this(execute, null) { }
+
+        public RelayCommand(Action<object> execute, Func<object, bool> canExecute)
+        {
+            this._execute2 = execute;
+            this._canExecute2 = canExecute;
+        }
+
+        public RelayCommand(Action execute) : this(execute, null) { }
+
+        public RelayCommand(Action execute, Func<bool> canExecute)
+        {
+            this._execute1 = execute;
+            this._canExecute1 = canExecute;
+        }
+
+        public bool CanExecute(object parameter)
+        {
+            if (_canExecute1 != null)
+                return _canExecute1.Invoke();
+            else if (_canExecute2 != null)
+                return _canExecute2.Invoke(parameter);
+            else
+                return true;
+        }
+
+        public void Execute(object parameter)
+        {
+            if (_execute1 != null)
+                _execute1.Invoke();
+            else if (_execute2 != null)
+                _execute2.Invoke(parameter);
+        }
+
+        public event EventHandler CanExecuteChanged
+        {
+            add { CommandManager.RequerySuggested += value; }
+            remove { CommandManager.RequerySuggested -= value; }
+        }
+    }
+}
+
+___________________________________ViewModels / Base / ObservableObject.cs ____________________________
+
+using System;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
+namespace MustafaBayram.ViewModels.Base
+{
+    public class ObservableObject : INotifyPropertyChanged
+    {
+        protected virtual void SetValue<T>(ref T variable, T value, [CallerMemberName] string propertyName = null)
+        {
+            if (Object.Equals(variable, value)) return;
+            variable = value;
+            OnPropertyChanged(propertyName);
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+}
+
+___________________________________ViewModels / Base / BaseListView.cs ____________________________
+
+using System.Collections.ObjectModel;
+
+namespace MustafaBayram.ViewModels.Base
+{
+    public class BaseListViewModel<T> : ObservableObject
+    {
+        private ObservableCollection<T> _items;
+        public ObservableCollection<T> Items { get => _items; set => SetValue(ref _items, value); }
+
+        private T _selectedItem;
+        public T SelectedItem { get => _selectedItem; set => SetValue(ref _selectedItem, value); }
+    }
+}
+
+
+___________________________________ViewModels / LoginViewModels / LoginViewModel.cs ____________________________
+
+using MustafaBayram.Commands;
+using MustafaBayram.ViewModels.Base;
+using System.Windows;
+using System.Windows.Controls;
+using System.Linq;
+using MustafaBayram.BusinessLayer;
+using MustafaBayram.EntityLayer.Models;
+using MustafaBayram.Models;
+using MustafaBayram.Views.LoginViews;
+
+namespace MustafaBayram.ViewModels.LoginWievModels
+{
+    public class LoginViewModel : ObservableObject
+    {
+        private string eposta;
+        public string EPosta { get => eposta; set => SetValue(ref eposta, value); }
+
+        public RelayCommand LoginCommand { get; set; }
+
+        public LoginViewModel()
+        {
+            LoginCommand = new RelayCommand(p => {
+                var passwordBox = p as PasswordBox;
+                if (passwordBox == null) return;
+
+                string sifre = passwordBox.Password;
+
+                var kullanici = new KullaniciManager().ToList()
+                    .FirstOrDefault(x => x.Eposta == EPosta && x.Parola == sifre);
+
+                if (kullanici != null)
+                {
+                    LoginVM.Id = kullanici.Id;
+                    LoginVM.EPosta = kullanici.Eposta;
+                    LoginVM.Parola = kullanici.Parola;
+
+                    MainWindow anaPencere = new MainWindow();
+                    anaPencere.Show();
+
+                    foreach (Window item in Application.Current.Windows)
+                    {
+                        if (item is LoginWindow) { item.Close(); break; }
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("E-Posta veya şifre hatalı!", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            });
+        }
+    }
+}
+
+
+___________________________________Views / LoginViews / LoginWindow.xaml ____________________________
+
+<Window x:Class="MustafaBayram.Views.LoginViews.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="MustafaBayram Giriş" Height="400" Width="350" 
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource MaterialDesignPaper}" ResizeMode="NoResize">
+    <Grid Margin="30">
+        <StackPanel VerticalAlignment="Center">
+            <md:PackIcon Kind="AccountLock" Width="80" Height="80" HorizontalAlignment="Center" Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+
+            <TextBlock Text="KULLANICI GİRİŞİ" 
+                       HorizontalAlignment="Center" 
+                       Margin="0,10,0,30" 
+                       Foreground="{DynamicResource PrimaryHueMidBrush}"
+                       Style="{DynamicResource MaterialDesignHeadline5TextBlock}" Height="33"/>
+
+            <TextBox md:HintAssist.Hint="E-Posta Adresi" 
+                     Text="{Binding EPosta, UpdateSourceTrigger=PropertyChanged}" 
+                     Style="{DynamicResource MaterialDesignOutlinedTextBox}" 
+                     Margin="0,10"
+                     md:TextFieldAssist.HasClearButton="True"
+                     FontSize="14"/>
+
+            <PasswordBox x:Name="txtParola" 
+                         md:HintAssist.Hint="Parola" 
+                         Style="{DynamicResource MaterialDesignOutlinedPasswordBox}" 
+                         Margin="0,10"
+                         FontSize="14"/>
+
+            <Button Content="SİSTEME GİRİŞ YAP" 
+                    IsDefault="True" 
+                    Command="{Binding LoginCommand}" 
+                    CommandParameter="{Binding ElementName=txtParola}" 
+                    Margin="0,20" 
+                    Height="50" 
+                    Style="{DynamicResource MaterialDesignRaisedButton}"
+                    md:ButtonAssist.CornerRadius="4"
+                    FontSize="15"
+                    FontWeight="Medium"
+                    Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>
+
+___________________________________Views / LoginViews / LoginWindow.xaml.cs ____________________________
+
+using System.Windows;
+using MustafaBayram.ViewModels.LoginWievModels;
+
+namespace MustafaBayram.Views.LoginViews
+{
+    public partial class LoginWindow : Window
+    {
+        public LoginWindow()
+        {
+            InitializeComponent();
+
+            this.DataContext = new LoginViewModel();
+        }
+    }
+}
+
+___________________________________ViewModels / KullaniciViewModels / KullaniciEditViewModel.cs ____________________________
+
+using MustafaBayram.Commands;
+using MustafaBayram.EntityLayer.Models;
+using MustafaBayram.ViewModels.Base;
+using System.Windows;
+
+namespace MustafaBayram.ViewModels.KullaniciWievModels
+{
+    public class KullaniciEditViewModel : ObservableObject
+    {
+        private Kullanici model;
+        public Kullanici Model { get => model; set => SetValue(ref model, value); }
+
+        public RelayCommand TamamCommand { get; set; }
+        public RelayCommand IptalCommand { get; set; }
+
+        public KullaniciEditViewModel() : this(new Kullanici()) { }
+
+        public KullaniciEditViewModel(Kullanici model)
+        {
+            this.Model = model;
+
+            TamamCommand = new RelayCommand(OnTamam);
+            IptalCommand = new RelayCommand(OnIptal);
+        }
+
+        private void OnTamam(object parameter)
+        {
+            if (parameter is Window view)
+            {
+                view.DialogResult = true;
+            }
+        }
+
+        private void OnIptal(object parameter)
+        {
+            if (parameter is Window view)
+            {
+                view.DialogResult = false;
+            }
+        }
+    }
+}
+
+
+___________________________________ViewModels / KullaniciViewModels / KullaniciListViewModel.cs ____________________________
+
+using MustafaBayram.BusinessLayer;
+using MustafaBayram.Commands;
+using MustafaBayram.EntityLayer.Models;
+using MustafaBayram.ViewModels.Base;
+using MustafaBayram.Views.KullaniciViews;
+using System.Collections.ObjectModel;
+using System.Windows;
+
+namespace MustafaBayram.ViewModels.KullaniciWievModels
+{
+    public class KullaniciListViewModel : BaseListViewModel<Kullanici>
+    {
+        private readonly KullaniciManager manager;
+
+        public RelayCommand RefreshCommand { get; set; }
+        public RelayCommand InsertCommand { get; set; }
+        public RelayCommand DeleteCommand { get; set; }
+        public RelayCommand UpdateCommand { get; set; }
+
+        public KullaniciListViewModel()
+        {
+            this.manager = new KullaniciManager();
+
+            RefreshCommand = new RelayCommand(OnRefresh);
+            InsertCommand = new RelayCommand(OnInsert);
+            DeleteCommand = new RelayCommand(OnDelete, (param) => param != null);
+            UpdateCommand = new RelayCommand(OnUpdate, (param) => param != null);
+
+            OnRefresh();
+        }
+
+        private void OnRefresh()
+        {
+            var kullanicilar = manager.ToList();
+            Items = new ObservableCollection<Kullanici>(kullanicilar);
+        }
+
+        private void OnInsert()
+        {
+            var vm = new KullaniciEditViewModel();
+            var view = new KullaniciWindow() { DataContext = vm };
+
+            if (view.ShowDialog() == true)
+            {
+                var entity = manager.Add(new Kullanici
+                {
+                    Eposta = vm.Model.Eposta,
+                    Parola = vm.Model.Parola
+                });
+
+                vm.Model.Id = entity.Id;
+                Items.Add(vm.Model);
+
+                OnRefresh();
+            }
+        }
+
+        private void OnDelete(object parameter)
+        {
+            if (parameter is Kullanici kullanici)
+            {
+                string mesaj = $"{kullanici.Eposta} kullanıcısını silmek istiyor musunuz?";
+
+                if (MessageBoxResult.Yes == MessageBox.Show(mesaj, "Kullanıcı Sil", MessageBoxButton.YesNo, MessageBoxImage.Question))
+                {
+                    if (manager.Delete(kullanici.Id) > 0)
+                    {
+                        Items.Remove(kullanici);
+                    }
+                }
+            }
+        }
+
+        private void OnUpdate(object parameter)
+        {
+            if (parameter is Kullanici kullanici)
+            {
+                var vm = new KullaniciEditViewModel(kullanici);
+                var view = new KullaniciWindow() { DataContext = vm };
+
+                if (view.ShowDialog() == true)
+                {
+                    if (0 < manager.Update(new Kullanici
+                    {
+                        Id = vm.Model.Id,
+                        Eposta = vm.Model.Eposta,
+                        Parola = vm.Model.Parola
+                    }))
+                    {
+                        OnRefresh();
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+___________________________________Views / KullaniciViews / KullaniciListView.xaml ____________________________
+
+<UserControl x:Class="MustafaBayram.Views.KullaniciViews.KullaniciListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Language="tr-TR"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Text="Kullanıcı Listesi"
+                       Style="{StaticResource MaterialDesignHeadline4TextBlock}"/>
+
+            <StackPanel Orientation="Horizontal" Grid.Column="1">
+                <Button Style="{StaticResource MaterialDesignIconButton}"
+                        Command="{Binding RefreshCommand}">
+                    <materialDesign:PackIcon Kind="Refresh"/>
+                </Button>
+                <Button Style="{StaticResource MaterialDesignIconButton}"
+                        Command="{Binding InsertCommand}">
+                    <materialDesign:PackIcon Kind="Plus"/>
+                </Button>
+                <Button Style="{StaticResource MaterialDesignIconButton}"
+                        Command="{Binding DeleteCommand}"
+                        CommandParameter="{Binding SelectedItem}">
+                    <materialDesign:PackIcon Kind="Trash"/>
+                </Button>
+                <Button Style="{StaticResource MaterialDesignIconButton}"
+                        Command="{Binding UpdateCommand}"
+                        CommandParameter="{Binding SelectedItem}">
+                    <materialDesign:PackIcon Kind="Pencil"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <DataGrid Grid.Row="1"
+                  ItemsSource="{Binding Items}"
+                  SelectedItem="{Binding SelectedItem}"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  IsReadOnly="True"
+                  AutoGenerateColumns="False"
+                  Margin="0,10,0,0">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="80"/>
+                <DataGridTextColumn Header="E-Posta Adresi" Binding="{Binding Eposta}" Width="*"/>
+                <DataGridTextColumn Header="Parola" Binding="{Binding Parola}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>
+
+___________________________________Views / KullaniciViews / KullaniciListView.xaml.cs ____________________________
+
+
+using System.Windows.Controls;
+
+namespace MustafaBayram.Views.KullaniciViews
+{
+    public partial class KullaniciListView : UserControl
+    {
+        public KullaniciListView()
+        {
+            InitializeComponent();
+        }
+    }
+}
+
+
+___________________________________Views / KullaniciViews / KullaniciWindow.xaml ____________________________
+
+<Window x:Class="MustafaBayram.Views.KullaniciViews.KullaniciWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        x:Name="kullaniciWin"
+        Title="Kullanıcı İşlemleri" Width="350" SizeToContent="Height" WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource MaterialDesignPaper}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <StackPanel Margin="20">
+        <TextBlock Text="Kullanıcı Bilgileri" 
+                   Style="{DynamicResource MaterialDesignHeadline5TextBlock}" 
+                   HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+        <TextBox Style="{DynamicResource MaterialDesignOutlinedTextBox}" 
+                 materialDesign:HintAssist.Hint="E-Posta Adresi" Margin="0,10" 
+                 Text="{Binding Model.Eposta, UpdateSourceTrigger=PropertyChanged}"/>
+
+        <TextBox Style="{DynamicResource MaterialDesignOutlinedTextBox}" 
+                 materialDesign:HintAssist.Hint="Parola" Margin="0,10" 
+                 Text="{Binding Model.Parola, UpdateSourceTrigger=PropertyChanged}"/>
+
+        <Grid Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Content="İPTAL" Style="{DynamicResource MaterialDesignFlatButton}" 
+                    Command="{Binding IptalCommand}" CommandParameter="{Binding ElementName=kullaniciWin}" Margin="5"/>
+
+            <Button Content="KAYDET" Grid.Column="1" Style="{DynamicResource MaterialDesignRaisedButton}" 
+                    Command="{Binding TamamCommand}" CommandParameter="{Binding ElementName=kullaniciWin}" Margin="5"/>
+        </Grid>
+    </StackPanel>
+</Window>
+
+
+___________________________________Views / KullaniciViews / KullaniciWindow.xaml.cs ____________________________
+
+
+
+
+
+using System.Windows;
+using MustafaBayram.ViewModels.LoginWievModels;
+
+namespace MustafaBayram.Views.LoginViews
+{
+    public partial class LoginWindow : Window
+    {
+        public LoginWindow()
+        {
+            InitializeComponent();
+
+            this.DataContext = new LoginViewModel();
+        }
+    }
+}
